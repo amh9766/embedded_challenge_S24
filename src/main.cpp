@@ -1,18 +1,24 @@
 #include <Arduino.h>
+#include <Adafruit_CircuitPlayground.h>
 
-// put function declarations here:
-int myFunction(int, int);
+float X, Y, Z;
 
 void setup() {
-  // put your setup code here, to run once:
-  int result = myFunction(2, 3);
+    Serial.begin(9600);
+    CircuitPlayground.begin();
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-}
+    X = CircuitPlayground.motionX();
+    Y = CircuitPlayground.motionY();
+    Z = CircuitPlayground.motionZ();
 
-// put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
+    Serial.print(">X:");
+    Serial.println(X);
+    Serial.print(">Y:");
+    Serial.println(Y);
+    Serial.print(">Z:");
+    Serial.println(Z);
+
+    delay(1000);
 }
