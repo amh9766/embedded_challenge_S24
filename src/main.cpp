@@ -1,7 +1,17 @@
 #include <Arduino.h>
 #include <Adafruit_CircuitPlayground.h>
 
-float X, Y, Z;
+#include <math.h>
+
+#define GRAVITY 9.8f
+#define ARR_SIZE 10
+
+float data[ARR_SIZE] = {0};
+
+float calcMagnitude(float x, float y, float z)
+{
+    return sqrtf(x * x + y * y + z * z);
+}
 
 void setup() {
     Serial.begin(9600);
@@ -9,16 +19,29 @@ void setup() {
 }
 
 void loop() {
-    X = CircuitPlayground.motionX();
-    Y = CircuitPlayground.motionY();
-    Z = CircuitPlayground.motionZ();
+    float X = CircuitPlayground.motionX();
+    float Y = CircuitPlayground.motionY();
+    float Z = CircuitPlayground.motionZ();
 
-    Serial.print(">X:");
-    Serial.println(X);
-    Serial.print(">Y:");
-    Serial.println(Y);
-    Serial.print(">Z:");
-    Serial.println(Z);
+    float accelerationMag = calcMagnitude(X, Y, Z) - GRAVITY;
+    Serial.print(">Magnitude:");
+    Serial.println(accelerationMag);
 
-    delay(1000);
+    float sum = 0;
+
+    for(int i = ARR_SIZE - 2; i >= 0; i--)
+    {
+        data[i + 1] = data[i];
+        sum += data[i + 1];
+    }
+
+    data[0] = accelerationMag;
+    sum += data[0];
+
+    Serial.print(">Average:");
+    Serial.println(sum / ARR_SIZE);
+
+    delay(100);
 }
+
+
