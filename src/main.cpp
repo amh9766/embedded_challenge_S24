@@ -11,6 +11,9 @@
 // Constant for gravitational acceleration
 #define GRAVITY 9.8f
 
+// Macro to test if the bits denoted by a bit mask are set in a value x
+#define TEST_BIT_MASK(x, y) (x & y) == y
+
 int second = 0;
 int minute = 0;
 int index = 0;
@@ -53,50 +56,77 @@ void init2SecTimer()
     OCR1A = 62500;
 }
 
+void initSwitch()
+{
+    // Note that A3_SWITCH, which is on Port F, Bit 4
+    
+    // Set bit for DDRF register:
+    //      * DDRDF -> 0b XXX1 XXXX
+    DDRF &= ~(0x10);
+}
+
 ISR(TIMER1_COMPA_vect)
 {
-    // Should trigger every two seconds
-    if(second < 60)
+    if(minute == 10)
     {
-
-        /*
-           ZeroFFT(data, DATA_SIZE)
-           for(int i=0; i<DATA_SIZE/2; i++){
-
-        //print the frequency
-        Serial.print(FFT_BIN(i, timesSampled, DATA_SIZE));
-        Serial.print(" Hz: ");
-
-        //print the corresponding FFT output
-        Serial.println(data[i]);
-        }
-        */
-
-        /*
-           ArduinoFFT<float> FFT = ArduinoFFT<float>(data, dataImg, DATA_SIZE, 166 / 2);
-           FFT.windowing(FFTWindow::Hamming, FFTDirection::Forward);
-           FFT.compute(FFTDirection::Forward);
-           FFT.complexToMagnitude();
-           float x = FFT.majorPeak();
-           Serial.println(x);
-        */
-
-        second += 2;
-        timesSampled = 0;
-        index = 0;
+        // Resting tremor was conclusively detected!
     }
     else
     {
-        second  = 0;
-        timesSampled = 0;
-        Serial.println("1 minute!");
+        // Should trigger every two seconds
+        if(second < 60)
+        {
+            /*
+            ZeroFFT(data, DATA_SIZE)
+            for(int i=0; i<DATA_SIZE/2; i++){
+
+            //print the frequency
+            Serial.print(FFT_BIN(i, timesSampled, DATA_SIZE));
+            Serial.print(" Hz: ");
+
+            //print the corresponding FFT output
+            Serial.println(data[i]);
+            }
+            */
+
+            /*
+               ArduinoFFT<float> FFT = ArduinoFFT<float>(data, dataImg, DATA_SIZE, 166 / 2);
+               FFT.windowing(FFTWindow::Hamming, FFTDirection::Forward);
+               FFT.compute(FFTDirection::Forward);
+               FFT.complexToMagnitude();
+               float x = FFT.majorPeak();
+               Serial.println(x);
+               */
+
+            if(true/* final FFT boolean check */)
+                second += 2;
+            else
+            {
+                // Reset counters if FFT does not indicate a tremor
+                second = 0;
+                minute = 0;
+            }
+
+            timesSampled = 0;
+            index = 0;
+        }
+        else if(minute < 10)
+        {
+
+            second  = 0;
+            timesSampled = 0;
+            Serial.println("1 minute!");
+        }
     }
 }
 
 void setup() {
     Serial.begin(9600);
     CircuitPlayground.begin();
+
+    initSwitch();
     init2SecTimer();
+
     sei();
 }
 
@@ -136,8 +166,14 @@ void loop() {
     // If the array is completely filled, the addition data is not entered in
     // the array to avoid an out-of-bounds index related crash. Moreover, the
     // switch must be activated to start the data compilation process.
-    if(index < DATA_SIZE)
-        data[index++] = finalSample;
+    bool switchOn = TEST_BIT_MASK(0x10);
+    if(switchOn)
+    {
+        if(index < DATA_SIZE)
+            data[index++] = finalSample;
+    }
+    else
+        index = 0;
 
     // Because we want to get about 50 samples per second, we would normally
     // want a delay of 20 ms to give a loop frequency of 50 Hz; however, we
