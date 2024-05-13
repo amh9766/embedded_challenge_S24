@@ -1,8 +1,6 @@
 #include <Arduino.h>
 #include <math.h>
 #include <Adafruit_CircuitPlayground.h>
-//#include <arduinoFFT.h>
-//#include <Adafruit_ZeroFFT.h>
 
 #include <EmbeddedChallenge.h>
 
@@ -11,8 +9,9 @@ int minute = 0;
 int index = 0;
 int timesSampled = 0;
 
-float data[DATA_SIZE] = {0};
-float dataImg[DATA_SIZE] = {0};
+int16_t data[DATA_SIZE] = {0};
+complex_t dataImg[DATA_SIZE];
+uint16_t spectrum[DATA_SIZE / 2] = {0};
 float movingAvg[AVG_SIZE] = {0};
 
 uint8_t meterColors[10][3] = {
@@ -55,7 +54,7 @@ void initTimer()
     // value does not fit within 16 bits (max value of 65535), a prescaler is
     // needed. A prescaler value of 256 was found to reduce the amount of ticks
     // to 62500, which fit within 16 bits.
-    OCR1A = 62500;
+    OCR1A = 62500 / 2;
 }
 
 void initSwitch()
@@ -91,11 +90,15 @@ void enableTimer()
 void disableTimer()
 {
     TCNT1 = 0;
-    TCCR1B &= ~(0b00000100);
+    TCCR1B &= ~(0b00000111);
 }
 
 ISR(TIMER1_COMPA_vect)
 {
+    // Disable interrupts to prevent calculation-related interleavings 
+    // on the shared data array 
+    cli();
+
     if(minute == 10)
     {
         // Resting tremor was conclusively detected!
@@ -119,30 +122,42 @@ ISR(TIMER1_COMPA_vect)
         // Should trigger every two seconds
         if(second < 60)
         {
-            /*
-            ZeroFFT(data, DATA_SIZE)
-            for(int i=0; i<DATA_SIZE/2; i++){
+            // DEBUG: Print the amount of samples taken in the last interval
+            //Serial.println(timesSampled);
 
-            //print the frequency
-            Serial.print(FFT_BIN(i, timesSampled, DATA_SIZE));
-            Serial.print(" Hz: ");
+            // Calculate FFT
+            fft_input(data, dataImg);
+            fft_execute(dataImg);
+            fft_output(dataImg, spectrum);
 
-            //print the corresponding FFT output
-            Serial.println(data[i]);
+            for(int i = 0; i < DATA_SIZE / 2; i++){
+                // Calculate the center frequency of the current bin
+                float curBin = FFT_BIN(i, timesSampled, DATA_SIZE);
+
+                int lowerFreqBound = 3;
+                int upperFreqBound = 6;
+
+                // Calculate shift in bounds since FFT binning will not be
+                // perfectly centered on the frequencies near the frequencies we
+                // want to observe.
+                float errorShift = ERROR_BOUND(lowerFreqBound, 10);
+                
+                // Observe desired range and then break once past it
+                if((curBin >= lowerFreqBound - errorShift) 
+                        && (curBin <= upperFreqBound + errorShift))
+                {
+                Serial.print(curBin);
+                Serial.print(" Hz: ");
+
+                //print the corresponding FFT output
+                Serial.println(spectrum[i]);
+                }
+                else if(curBin > (upperFreqBound + errorShift))
+                    break;
             }
-            */
-
-            /*
-               ArduinoFFT<float> FFT = ArduinoFFT<float>(data, dataImg, DATA_SIZE, 166 / 2);
-               FFT.windowing(FFTWindow::Hamming, FFTDirection::Forward);
-               FFT.compute(FFTDirection::Forward);
-               FFT.complexToMagnitude();
-               float x = FFT.majorPeak();
-               Serial.println(x);
-               */
 
             if(true/* final FFT boolean check */)
-                second += 2;
+                second++;
             else
             {
                 // Reset counters if FFT does not indicate a tremor
@@ -153,7 +168,8 @@ ISR(TIMER1_COMPA_vect)
             timesSampled = 0;
             index = 0;
         }
-        else if(minute < 10)
+        
+        if(second == 60)
         {
 
             second = 0;
@@ -163,7 +179,8 @@ ISR(TIMER1_COMPA_vect)
             setNeoPixels();
         }
     }
-    Serial.println("Test");
+
+    sei();
 }
 
 void setup() {
@@ -187,6 +204,7 @@ void loop() {
     // microcontroller.
     float accelMagnitude = calcMagnitude(x, y, z) - GRAVITY;
     
+    // DEBUG: Print current acceleration magnitude
     //Serial.print(">Magnitude:");
     //Serial.println(accelMagnitude);
 
@@ -201,10 +219,11 @@ void loop() {
     movingAvg[0] = accelMagnitude;
     sum += movingAvg[0];
 
-    //Serial.print(">Average:");
-    //Serial.println(sum * 1000 / AVG_SIZE);
-
     float finalSample = sum / AVG_SIZE;
+
+    // DEBUG: Print average sample value
+    //Serial.print(">Average:");
+    //Serial.println(finalSample);
     
     // Insert moving average value into the "capture window" data array and
     // increment the index. 
@@ -217,7 +236,8 @@ void loop() {
     {
         enableTimer();
         if(index < DATA_SIZE)
-            data[index++] = finalSample;
+            data[index++] = (int16_t) (finalSample * 100);
+        timesSampled++;
     }
     else
     {
@@ -228,12 +248,12 @@ void loop() {
         index = 0;
     }
 
-    // Because we want to get about 50 samples per second, we would normally
-    // want a delay of 20 ms to give a loop frequency of 50 Hz; however, we
-    // choose a slightly shorter delay to get more samples since the speed at
+    // Because we want to get about 64 samples per second, we would normally
+    // want a delay of 15.62 ms to give a loop frequency of 64 Hz; however, we
+    // choose a shorter delay to get more samples and increase bin size based on
+    // sampling rate since the speed at
     // which loop cycles occur are not exactly the same every time. As such,
     // the timesSampled variable effectively provides the sample rate for each
     // "capture window."
-    timesSampled++;
-    delay(10);
+    delay(8);
 }
