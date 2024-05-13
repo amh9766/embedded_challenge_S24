@@ -4,15 +4,7 @@
 //#include <arduinoFFT.h>
 //#include <Adafruit_ZeroFFT.h>
 
-// Constants for array-related sizes
-#define DATA_SIZE 128
-#define AVG_SIZE 10
-
-// Constant for gravitational acceleration
-#define GRAVITY 9.8f
-
-// Macro to test if the bits denoted by a bit mask are set in a value x
-#define TEST_BIT_MASK(x, y) (x & y) == y
+#include <EmbeddedChallenge.h>
 
 int second = 0;
 int minute = 0;
@@ -23,12 +15,20 @@ float data[DATA_SIZE] = {0};
 float dataImg[DATA_SIZE] = {0};
 float movingAvg[AVG_SIZE] = {0};
 
-float calcMagnitude(float x, float y, float z)
-{
-    return sqrtf(x * x + y * y + z * z);
-}
+uint8_t meterColors[10][3] = {
+    {0, 255, 0},    // Green, high
+    {85, 85, 0},    // Yellow, low
+    {170, 170, 0},  // Yellow, mid
+    {255, 255, 0},  // Yellow, high
+    {85, 55, 0},    // Orange, low
+    {170, 110, 0},  // Orange, mid
+    {255, 165, 0},  // Orange, high
+    {85, 0, 0},     // Red, low
+    {170, 0, 0},    // Red, mid 
+    {255, 0, 0},    // Red, high
+};
 
-void init2SecTimer()
+void initTimer()
 {
     // Using Timer/Counter1, which is a 16-bit counter
     
@@ -40,11 +40,13 @@ void init2SecTimer()
     //          * Waveform Generation Mode -> CTC
     //      * TCCR1B -> 0b XXX0 1100
     //          * Waveform Generation Mode -> CTC
+    //              * Note however that it will be off until enabled by the
+    //                switch.
     //          * Clock Prescaler -> 256
     //      * TIMSK1 -> 0b XXXX 0010
     //          * Timer/Counter1 Output Compare A Match Interrupt -> Enable
     TCCR1A = 0x00;
-    TCCR1B = 0b00001100;
+    TCCR1B = 0b00001000;
     TIMSK1 = 0b00000010;
 
     // For the microcontroller's clock frequency of 8 MHz, a tick is 1.25e-7
@@ -65,11 +67,52 @@ void initSwitch()
     DDRF &= ~(0x10);
 }
 
+void setNeoPixels()
+{
+    CircuitPlayground.clearPixels();
+
+    for(int i = 0; i < minute; i++)
+    {
+        CircuitPlayground.setPixelColor(i, meterColors[i][0], 
+                meterColors[i][1], meterColors[i][2]);
+    }
+}
+
+float calcMagnitude(float x, float y, float z)
+{
+    return sqrtf(x * x + y * y + z * z);
+}
+
+void enableTimer()
+{
+    TCCR1B |= 0b00000100;
+}
+
+void disableTimer()
+{
+    TCNT1 = 0;
+    TCCR1B &= ~(0b00000100);
+}
+
 ISR(TIMER1_COMPA_vect)
 {
     if(minute == 10)
     {
         // Resting tremor was conclusively detected!
+        disableTimer();
+
+        for(int i = 0; i < 5; i++)
+        {
+            setNeoPixels();
+            CircuitPlayground.playTone(100, 250);
+            CircuitPlayground.clearPixels();
+            delay(500);
+        }
+
+        second = 0;
+        minute = 0;
+
+        enableTimer();
     }
     else
     {
@@ -113,11 +156,14 @@ ISR(TIMER1_COMPA_vect)
         else if(minute < 10)
         {
 
-            second  = 0;
+            second = 0;
+            minute++;
             timesSampled = 0;
-            Serial.println("1 minute!");
+
+            setNeoPixels();
         }
     }
+    Serial.println("Test");
 }
 
 void setup() {
@@ -125,7 +171,7 @@ void setup() {
     CircuitPlayground.begin();
 
     initSwitch();
-    init2SecTimer();
+    initTimer();
 
     sei();
 }
@@ -166,14 +212,21 @@ void loop() {
     // If the array is completely filled, the addition data is not entered in
     // the array to avoid an out-of-bounds index related crash. Moreover, the
     // switch must be activated to start the data compilation process.
-    bool switchOn = TEST_BIT_MASK(0x10);
+    bool switchOn = TEST_BIT_MASK(PINF, 0x10);
     if(switchOn)
     {
+        enableTimer();
         if(index < DATA_SIZE)
             data[index++] = finalSample;
     }
     else
+    {
+        disableTimer();
+        CircuitPlayground.clearPixels();
+        second = 0;
+        minute = 0;
         index = 0;
+    }
 
     // Because we want to get about 50 samples per second, we would normally
     // want a delay of 20 ms to give a loop frequency of 50 Hz; however, we
