@@ -1,16 +1,23 @@
 #include <Arduino.h>
-#include <Adafruit_CircuitPlayground.h>
-
 #include <math.h>
+#include <Adafruit_CircuitPlayground.h>
+//#include <arduinoFFT.h>
+//#include <Adafruit_ZeroFFT.h>
 
-#define GRAVITY 9.8f
-#define ARR_SIZE 100
+// Constants for array-related sizes
+#define DATA_SIZE 128
 #define AVG_SIZE 10
+
+// Constant for gravitational acceleration
+#define GRAVITY 9.8f
 
 int second = 0;
 int minute = 0;
+int index = 0;
+int timesSampled = 0;
 
-float data[ARR_SIZE] = {0};
+float data[DATA_SIZE] = {0};
+float dataImg[DATA_SIZE] = {0};
 float movingAvg[AVG_SIZE] = {0};
 
 float calcMagnitude(float x, float y, float z)
@@ -49,7 +56,41 @@ void init2SecTimer()
 ISR(TIMER1_COMPA_vect)
 {
     // Should trigger every two seconds
-    Serial.println("Hello World!");
+    if(second < 60)
+    {
+
+        /*
+           ZeroFFT(data, DATA_SIZE)
+           for(int i=0; i<DATA_SIZE/2; i++){
+
+        //print the frequency
+        Serial.print(FFT_BIN(i, timesSampled, DATA_SIZE));
+        Serial.print(" Hz: ");
+
+        //print the corresponding FFT output
+        Serial.println(data[i]);
+        }
+        */
+
+        /*
+           ArduinoFFT<float> FFT = ArduinoFFT<float>(data, dataImg, DATA_SIZE, 166 / 2);
+           FFT.windowing(FFTWindow::Hamming, FFTDirection::Forward);
+           FFT.compute(FFTDirection::Forward);
+           FFT.complexToMagnitude();
+           float x = FFT.majorPeak();
+           Serial.println(x);
+        */
+
+        second += 2;
+        timesSampled = 0;
+        index = 0;
+    }
+    else
+    {
+        second  = 0;
+        timesSampled = 0;
+        Serial.println("1 minute!");
+    }
 }
 
 void setup() {
@@ -60,27 +101,50 @@ void setup() {
 }
 
 void loop() {
-    float X = CircuitPlayground.motionX();
-    float Y = CircuitPlayground.motionY();
-    float Z = CircuitPlayground.motionZ();
+    float x = CircuitPlayground.motionX();
+    float y = CircuitPlayground.motionY();
+    float z = CircuitPlayground.motionZ();
 
-    float accelerationMag = calcMagnitude(X, Y, Z) - GRAVITY;
-    Serial.print(">Magnitude:");
-    Serial.println(accelerationMag);
+    // Calculate magnitude of acceleration using the x, y, z components 
+    // provided by the accelerometer and subtract the acceleration of 
+    // gravity to get only the contribution from the user moving the
+    // microcontroller.
+    float accelMagnitude = calcMagnitude(x, y, z) - GRAVITY;
+    
+    //Serial.print(">Magnitude:");
+    //Serial.println(accelMagnitude);
 
     float sum = 0;
 
-    for(int i = ARR_SIZE - 2; i >= 0; i--)
+    for(int i = AVG_SIZE - 2; i >= 0; i--)
     {
-        data[i + 1] = data[i];
-        sum += data[i + 1];
+        movingAvg[i + 1] = movingAvg[i];
+        sum += movingAvg[i + 1];
     }
 
-    data[0] = accelerationMag;
-    sum += data[0];
+    movingAvg[0] = accelMagnitude;
+    sum += movingAvg[0];
 
-    Serial.print(">Average:");
-    Serial.println(sum / ARR_SIZE);
+    //Serial.print(">Average:");
+    //Serial.println(sum * 1000 / AVG_SIZE);
 
-    delay(100);
+    float finalSample = sum / AVG_SIZE;
+    
+    // Insert moving average value into the "capture window" data array and
+    // increment the index. 
+    //  
+    // If the array is completely filled, the addition data is not entered in
+    // the array to avoid an out-of-bounds index related crash. Moreover, the
+    // switch must be activated to start the data compilation process.
+    if(index < DATA_SIZE)
+        data[index++] = finalSample;
+
+    // Because we want to get about 50 samples per second, we would normally
+    // want a delay of 20 ms to give a loop frequency of 50 Hz; however, we
+    // choose a slightly shorter delay to get more samples since the speed at
+    // which loop cycles occur are not exactly the same every time. As such,
+    // the timesSampled variable effectively provides the sample rate for each
+    // "capture window."
+    timesSampled++;
+    delay(10);
 }
