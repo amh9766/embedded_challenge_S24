@@ -15,7 +15,7 @@
 #define HIGH_TREMOR_THRESHOLD 100
 
 // Constant for timing threshold
-#define MINUTE_THRESHOLD 10
+#define MINUTE_THRESHOLD 1
 
 // Constant for gravitational acceleration, taken from
 // https://en.wikipedia.org/wiki/Gravitational_acceleration

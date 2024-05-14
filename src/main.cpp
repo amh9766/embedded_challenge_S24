@@ -1,15 +1,63 @@
+/**
+ * Amani Hernandez, Elaina Zodiatis
+ * amh9766, ez2241
+ * Group 24
+ * ECE-UY 4144
+ * 5/14/24
+ *
+ * Description:
+ *      The program below, as a submission of the Spring 2024 Embedded
+ *      Challenge, acts a tremor-detection device that samples accelerometer
+ *      data, applies a moving average low-pass filter to ignore higher-end
+ *      frequencies, uses a set of Fast Fourier Transform functions used
+ *      originally for the on-board mic (more credit-related information shown
+ *      in the ffft.S file) to get the contribution of the frequencies
+ *      associated with Parkinson's resting tremors (3-6 Hz), evaluates if the
+ *      contributions are substantial enough to be considered a tremor, and
+ *      continues the process if tremors are still detected for a set amount of
+ *      minutes. If a tremor is not detected at any point, the process is
+ *      restarted, eliminating the risk of false positives unless the full
+ *      amount of time detects tremors. After the full process, the
+ *      microcontroller takes an average of all average contributions within
+ *      this frequency range from the FFT output observed the entire time and 
+ *      provides a diagnosis of severity via a limit meter that flashes and 
+ *      scaled tone that sounds five times. 
+ *
+ *      In regards to feedback and usage, the device provides a brief tone
+ *      for each second of data acquired to indicate that a tremor was detected
+ *      at that instance; note that these tones also go from low to high in
+ *      regards to severity but are only meant to help the user recognize that
+ *      they are using the device correctly, not a full final diagnosis or
+ *      evaluation of an intended "capture window." Also note that the device
+ *      must have the switch in the "on" position to start the data evaluation
+ *      process; data will not be taken in and the timer will not interrupt to
+ *      do the FFT process in addition to providing no noise-related feedback.
+ * 
+ *      Note on reused/borrowed code from installed libraries:
+ *          This file was taken directly from the Adafruit Circuit Playground
+ *          library folder under "utility" where all the headers for the
+ *          library exist. Because of its functionality with the mic observed
+ *          in its example, it was lifted and used in this project to provide
+ *          FFT functionality already provided for this device and its
+ *          architecture. It has not been modified at all. Similarly, there
+ *          is other code borrowed from the Adafruit Circuit Playground
+ *          library in the "EmbeddedChallenge.h" header, which properly
+ *          attributes the sources of each segment.
+ */
 #include <math.h>
 #include <Arduino.h>
 #include <Adafruit_CircuitPlayground.h>
 
 #include <EmbeddedChallenge.h>
 
+// Variables for globally incremental processes
 int second = 0;
 int minute = 0;
 int index = 0;
 int timesSampled = 0;
 uint32_t binAvgOverall = 0;
 
+// Arrays for data manipulation and acquisition
 int16_t data[DATA_SIZE] = {0};
 complex_t dataImg[DATA_SIZE];
 uint16_t spectrum[DATA_SIZE / 2] = {0};
@@ -95,18 +143,23 @@ void setProgressionMeter()
 
 float calcMagnitude(float x, float y, float z)
 {
+    // Calculates the magnitude of a three-dimensional vector
     return sqrtf(x * x + y * y + z * z);
 }
 
 void enableTimer()
 {
+    // Sets the prescaler bit for a prescaler of 256, turning the clock back on
+    // if it was previously off or doing nothing otherwise (idempotent)
     TCCR1B |= 0b00000100;
 }
 
 void disableTimer()
 {
-    TCNT1 = 0;
+    // Zeroes out prescaler bits associated with the clock source and sets the
+    // value the timer was at back to 0, resetting the timer
     TCCR1B &= ~(0b00000111);
+    TCNT1 = 0;
 }
 
 ISR(TIMER1_COMPA_vect)
@@ -241,6 +294,8 @@ ISR(TIMER1_COMPA_vect)
 
         if(second == 60)
         {
+            // Clear seconds and interval sample amount, increment minute
+            // counter and update progression
             second = 0;
             minute++;
             timesSampled = 0;
@@ -304,6 +359,12 @@ void loop() {
     if(switchOn)
     {
         enableTimer();
+        // Note that because the input to the FFT functions are made for
+        // int16_t type numbers rather than floats, the floating value sampled
+        // is scaled up by two orders of magnitude to preserve at least the
+        // tenths and hundredths place for analysis, which only affects the 
+        // amplitudes of the samples holistically and does not change the
+        // frequencies.
         if(index < DATA_SIZE)
             data[index++] = (int16_t) (finalSample * 100);
         timesSampled++;
@@ -321,6 +382,8 @@ void loop() {
     // want a delay of 15.62 ms to give a loop frequency of 64 Hz; however, we
     // choose a shorter delay to get more samples and increase bin size based on
     // sampling rate since the amount of times sampled is effectively our 
-    // sampling frequency.
+    // sampling frequency. The faster sampling rate also prevents the edge case
+    // where not enough data samples are collected in a given timeframe; thus.
+    // we are overcompensating to prioritize consistency.
     delay(8);
 }
