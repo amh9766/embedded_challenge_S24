@@ -1,18 +1,25 @@
-// Constants for array-related sizes
-#define DATA_SIZE 64
-#define AVG_SIZE 10
-
-// Constant for timing threshold
-#define MINUTE_THRESHOLD 10
-
-// Constant for gravitational acceleration
-#define GRAVITY 9.8f
+// Macro to calculate error bounds based on a given percentage
+#define ERROR_BOUND(bound, x) bound * ((float) x / 100)
 
 // Macro to test if the bits denoted by a bit mask, y, are set in a value, x
 #define TEST_BIT_MASK(x, y) (x & y) == y
 
-// Macro to calculate error bounds based on a given percentage
-#define ERROR_BOUND(bound, x) bound * ((float) x / 100)
+// Constants for array-related sizes
+#define DATA_SIZE 64
+#define AVG_SIZE 10
+
+// Constants for FFT bin sum tremor tresholds found via empirical testing but
+// can be adjusted here
+#define MIN_TREMOR_THRESHOLD 20
+#define MED_TREMOR_THRESHOLD 50
+#define HIGH_TREMOR_THRESHOLD 100
+
+// Constant for timing threshold
+#define MINUTE_THRESHOLD 10
+
+// Constant for gravitational acceleration, taken from
+// https://en.wikipedia.org/wiki/Gravitational_acceleration
+#define GRAVITY 9.80665
 
 // Note that the following code snippet was borrowed from the Adafruit
 // Zero FFT library written by Dean Miller for Adafruit Industries
