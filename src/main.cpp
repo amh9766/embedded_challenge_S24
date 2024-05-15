@@ -332,8 +332,8 @@ void loop() {
     //Serial.print(">Magnitude:");
     //Serial.println(accelMagnitude);
 
+    // Shift moving average and calculate it at the same time
     float sum = 0;
-
     for(int i = AVG_SIZE - 2; i >= 0; i--)
     {
         movingAvg[i + 1] = movingAvg[i];
@@ -352,7 +352,7 @@ void loop() {
     // Insert moving average value into the "capture window" data array and
     // increment the index. 
     //  
-    // If the array is completely filled, the addition data is not entered in
+    // If the array is completely filled, the additional data is not entered in
     // the array to avoid an out-of-bounds index related crash. Moreover, the
     // switch must be activated to start the data compilation process.
     bool switchOn = TEST_BIT_MASK(PINF, 0x10);
